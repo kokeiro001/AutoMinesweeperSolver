@@ -40,7 +40,7 @@ namespace PlayMinesweeper
 
 			public void Init()
 			{
-				val = NotOpen;
+				val = NotYetOpen;
 				isChanged = false;
 				IsFix = false;
 			}
@@ -59,24 +59,26 @@ namespace PlayMinesweeper
 			}
 		}
 
+		StringBuilder debugSb = new StringBuilder();
+
 		const int OriginX = 39;
 		const int OriginY = 82;
 		const int BlockSize = 18;
 		
-		const int GameWidth = 30 + 2;
-		const int GameHeight = 16 + 2;
+		public const int GameWidth = 30 + 2;
+		public const int GameHeight = 16 + 2;
 
 		const int GameScreenWidth = BlockSize * GameWidth;
 		const int GameScreenHeight = BlockSize * GameHeight;
 
 		const int Invalid = -3;
-		const int NotOpen = -2;
+		const int NotYetOpen = -2;
 		const int BombFlag = -1;
-		const int None = 0;
-		const int Max = 1000;
+		const int Opened = 0;
+		const int VirtualOpened = 1000;
 
 		const int VirtualSpace = 5 + 2;
-		const int SleepCnt = 7;
+		const int SleepCnt = 16;
 
 		Random random = new Random();
 
@@ -127,6 +129,7 @@ namespace PlayMinesweeper
 				mineProcess = ps.Find(p => p.ProcessName == a);
 				if (mineProcess == null)
 				{
+					Process.Start("");
 					string text = "マインスイーパを起動してからにしてね\n再試行する？";
 					if (MessageBox.Show(text, "error", MessageBoxButtons.YesNo) == DialogResult.No)
 					{
@@ -193,11 +196,9 @@ namespace PlayMinesweeper
 			isUpdate = false;
 		}
 
-		void btnTest_Click(object sender, EventArgs e)
+		private void btnRestart_Click(object sender, EventArgs e)
 		{
-			Win32APIHelper.SetForceForegroundWindow(mineProcess.MainWindowHandle);
-			isUpdate = true;
-			Thread.Sleep(1000);
+			Restart();
 		}
 
 		void CheckGameOver()
@@ -254,12 +255,12 @@ namespace PlayMinesweeper
 				if (isUpdate)
 				{
 					// コピー
-					int enableCnt = 0;
+					int updatedItemCnt = 0;
 					for (int i = 0; i < data.Length; i++)
 					{
-						if (data[i].IsChanged) dataUpdateBuf[enableCnt++] = data[i];
+						if (data[i].IsChanged) dataUpdateBuf[updatedItemCnt++] = data[i];
 					}
-					if (enableCnt == 0)
+					if (updatedItemCnt == 0)
 					{
 						if (!isReseted)
 						{
@@ -279,13 +280,15 @@ namespace PlayMinesweeper
 							else
 							{
 								//失敗 それでも無理だったらランダムに開く
+								MessageBox.Show("わかんねーからランダムに開くよ");
+								Thread.Sleep(300);
 								int i = 0;
 								do
 								{
 									i = random.Next(data.Length);
-								} while (data[i].Val != NotOpen);
-								//MoveMouse(i % GameWidth - 1, i / GameWidth - 1);
+								} while (data[i].Val != NotYetOpen);
 								Move_Click(i % GameWidth - 1, i / GameWidth - 1, MouseButtons.Left);
+								Thread.Sleep(500);
 							}
 						}
 					}
@@ -293,7 +296,7 @@ namespace PlayMinesweeper
 					{
 						// 変更された箇所が存在するなら
 						isUpdatedNowFrame = false;
-						for (int i = 0; i < enableCnt; i++)
+						for (int i = 0; i < updatedItemCnt; i++)
 						{
 							Data tmp = dataUpdateBuf[i];
 							if (tmp.IsChanged)
@@ -321,46 +324,16 @@ namespace PlayMinesweeper
 			Application.Exit();
 		}
 
-		enum VirtualState
-		{ 
-			None,
-			Open,
-			Flag,
-		}
-
-		struct VirtualData
-		{
-			public int Index;
-			public int Value;
-			public bool IsChanged;
-			public VirtualState VState;
-		}
 
 		bool EnableIndex(int idx)
 		{
 			return 0 <= idx && idx < data.Length;
 		}
 
+
 		bool すごい考える()
 		{
-			bool success = false;
-			notOpenIndex.Clear();
-			// 周りに数字がある未開のマスを取得する
-			for (int i = 0; i < data.Length; i++)
-			{
-				if (data[i].Val == NotOpen)
-				{
-					for (int j = 0; j < 8; j++)
-					{
-						int idx = i + kinbo[j];
-						if (data[idx].Val > 0)
-						{
-							notOpenIndex.Add(i);
-							break;
-						}
-					}
-				}
-			}
+			RegistNotYetOpenForVirtual();
 			foreach (var index in notOpenIndex)
 			{
 				// 仮想盤面にコピー
@@ -375,123 +348,21 @@ namespace PlayMinesweeper
 				if (y1 < 0) y1 = 0;
 				if (y2 >= GameHeight) y2 = GameHeight;
 
-				for (int y = y1 -1; y <= y2; y++)
-				{
-					for (int x = x1 - 1; x <= x2; x++)
-					{
-						int buf = y * GameWidth + x;
-						if (EnableIndex(buf))
-						{
-							virtualBoard[buf].Index = buf;
-							virtualBoard[buf].IsChanged = true;
-
-							virtualBoard[buf].Value = data[buf].Val;
-
-							if (data[buf].Val == Max) virtualBoard[buf].VState = VirtualState.Open;
-							else virtualBoard[buf].VState = VirtualState.None;
-						}
-					}
-				}
+				CopyToVirtualBoard(y1, x1, y2, x2);
 
 				// 自分に旗を立てる
-				// todo ココをあけるverも必要
 				virtualBoard[index].Value = BombFlag;
-				virtualBoard[index].VState = VirtualState.Flag;
-				bool changed = true;
-				while(changed)
+				if (CalcVirtualBoard(index, y1, x1, y2, x2, false))
 				{
-					changed = false;
-					// 左上から考えまーす
-					for (int y = y1; y < y2; y++)
-					{
-						for (int x = x1; x < x2; x++)
-						{
-							int targetIdx = y * GameWidth + x;
-							if (!EnableIndex(targetIdx)) continue;
-							if (virtualBoard[targetIdx].Value <= 0) continue;
-							if (virtualBoard[targetIdx].VState != VirtualState.None) continue;
-
-							int notOpenCnt = 0;
-							int flagCnt = 0;
-							for (int i = 0; i < 8; i++)
-							{
-								int buf = y * GameWidth + x + kinbo[i];
-								if (!EnableIndex(buf)) continue;
-								if (virtualBoard[buf].VState == VirtualState.Open) continue;
-								if (virtualBoard[buf].Value == NotOpen && virtualBoard[buf].VState == VirtualState.None) notOpenCnt++;
-								if (virtualBoard[buf].Value == BombFlag || virtualBoard[buf].VState == VirtualState.Flag) flagCnt++;
-							}
-							// 自分
-
-							if (virtualBoard[targetIdx].Value == flagCnt)
-							{
-								// 自分の数とフラグの数が等しいなら、未開のマスを全部開ける
-								for (int i = 0; i < 8; i++)
-								{
-									int buf = targetIdx + kinbo[i];
-									if (!EnableIndex(buf)) continue;
-									if (virtualBoard[buf].Value == NotOpen && virtualBoard[buf].VState == VirtualState.None)
-									{
-										virtualBoard[buf].VState = VirtualState.Open;
-										changed = true;
-									}
-								}
-							}
-							else if (virtualBoard[targetIdx].Value == notOpenCnt + flagCnt)
-							{
-								// 自分の数と「フラグの数＋未開マス」なら全部にフラグを立てる
-								for (int j = 0; j < 8; j++)
-								{
-									int buf = targetIdx + kinbo[j];
-									if (!EnableIndex(buf)) continue;
-									//if (virtualBoard[buf].Value == BombFlag && virtualBoard[buf].VState == VirtualState.None)
-									if (virtualBoard[buf].Value == NotOpen && virtualBoard[buf].VState == VirtualState.None)
-									{
-										virtualBoard[buf].VState = VirtualState.Flag;
-										changed = true;
-									}
-								}
-							}
-							else if (flagCnt > virtualBoard[targetIdx].Value ||
-											 flagCnt + notOpenCnt < virtualBoard[targetIdx].Value)
-							{
-								// 旗の数が自分より多い場合、不正な状況である
-								// つまり、始点は開ける必要がある
-								//MoveMouse(index % GameWidth - 1, index / GameWidth - 1);
-								Move_Click(index % GameWidth - 1, index / GameWidth - 1, MouseButtons.Left);
-								data[index].Val = Max;
-								Thread.Sleep(SleepCnt);
-								success = true;
-								goto LOOP_END;
-							}
-						}
-					}
+					return true;
 				}
-			LOOP_END: ;
 			}
-			return success;
+			return false;
 		}
 
 		bool すごい考える２()
 		{
-			bool success = false;
-			notOpenIndex.Clear();
-			// 周りに数字がある未開のマスを取得する
-			for (int i = 0; i < data.Length; i++)
-			{
-				if (data[i].Val == NotOpen)
-				{
-					for (int j = 0; j < 8; j++)
-					{
-						int idx = i + kinbo[j];
-						if (data[idx].Val > 0)
-						{
-							notOpenIndex.Add(i);
-							break;
-						}
-					}
-				}
-			}
+			RegistNotYetOpenForVirtual();
 			foreach (var index in notOpenIndex)
 			{
 				// 仮想盤面にコピー
@@ -506,115 +377,168 @@ namespace PlayMinesweeper
 				if (y1 < 0) y1 = 0;
 				if (y2 >= GameHeight) y2 = GameHeight;
 
-				for (int y = y1 - 1; y <= y2; y++)
+				CopyToVirtualBoard(y1, x1, y2, x2);
+
+				// 自分に旗を立てる
+				virtualBoard[index].Value = Opened;
+				if (CalcVirtualBoard(index, y1, x1, y2, x2, true))
 				{
-					for (int x = x1 - 1; x <= x2; x++)
-					{
-						int buf = y * GameWidth + x;
-						if (EnableIndex(buf))
-						{
-							virtualBoard[buf].Index = buf;
-							virtualBoard[buf].IsChanged = true;
-
-							virtualBoard[buf].Value = data[buf].Val;
-
-							if (data[buf].Val == Max) virtualBoard[buf].VState = VirtualState.Open;
-							else virtualBoard[buf].VState = VirtualState.None;
-						}
-					}
+					return true;
 				}
+			}
+			return false;
+		}
 
-				virtualBoard[index].Value = Max;
-				virtualBoard[index].VState = VirtualState.Open;
-				bool changed = true;
-				while (changed)
+		private void RegistNotYetOpenForVirtual()
+		{
+			notOpenIndex.Clear();
+			// 周りに数字がある未開のマスを取得する
+			for (int i = 0; i < data.Length; i++)
+			{
+				if (data[i].Val == NotYetOpen)	// まだ開いてないマス
 				{
-					changed = false;
-					// 左上から考えまーす
-					for (int y = y1; y < y2; y++)
+					for (int j = 0; j < 8; j++)		// その周囲に
 					{
-						for (int x = x1; x < x2; x++)
+						int idx = i + kinbo[j];
+						if (data[idx].Val > 0)			// １～９の数字があれば
 						{
-							int targetIdx = y * GameWidth + x;
-							if (!EnableIndex(targetIdx)) continue;
-							if (virtualBoard[targetIdx].Value <= 0) continue;
-							if (virtualBoard[targetIdx].VState != VirtualState.None) continue;
-
-							int notOpenCnt = 0;
-							int flagCnt = 0;
-							for (int i = 0; i < 8; i++)
-							{
-								int buf = y * GameWidth + x + kinbo[i];
-								if (!EnableIndex(buf)) continue;
-								if (virtualBoard[buf].VState == VirtualState.Open) continue;
-								if (virtualBoard[buf].Value == NotOpen && virtualBoard[buf].VState == VirtualState.None) notOpenCnt++;
-								if (virtualBoard[buf].Value == BombFlag || virtualBoard[buf].VState == VirtualState.Flag) flagCnt++;
-							}
-							// 自分
-
-							if (virtualBoard[targetIdx].Value == flagCnt)
-							{
-								// 自分の数とフラグの数が等しいなら、未開のマスを全部開ける
-								for (int i = 0; i < 8; i++)
-								{
-									int buf = targetIdx + kinbo[i];
-									if (!EnableIndex(buf)) continue;
-									if (virtualBoard[buf].Value == NotOpen && virtualBoard[buf].VState == VirtualState.None)
-									{
-										virtualBoard[buf].VState = VirtualState.Open;
-										changed = true;
-									}
-								}
-							}
-							else if (virtualBoard[targetIdx].Value == notOpenCnt + flagCnt)
-							{
-								// 自分の数と「フラグの数＋未開マス」なら全部にフラグを立てる
-								for (int i = 0; i < 8; i++)
-								{
-									int buf = targetIdx + kinbo[i];
-									if (!EnableIndex(buf)) continue;
-									//if (virtualBoard[buf].Value == BombFlag && virtualBoard[buf].VState == VirtualState.None)
-									if (virtualBoard[buf].Value == NotOpen && virtualBoard[buf].VState == VirtualState.None)
-									{
-										virtualBoard[buf].VState = VirtualState.Flag;
-										changed = true;
-									}
-								}
-							}
-							else if (flagCnt > virtualBoard[targetIdx].Value ||
-											 flagCnt + notOpenCnt < virtualBoard[targetIdx].Value)
-							{
-								// 旗の数が自分より多い場合、不正な状況である
-								// つまり、始点は開ける必要がある
-								//MoveMouse(index % GameWidth - 1, index / GameWidth - 1);
-								Move_Click(index % GameWidth - 1, index / GameWidth - 1, MouseButtons.Right);
-								data[index].Val = Max;
-								Thread.Sleep(SleepCnt);
-								success = true;
-								goto LOOP_END2;
-							}
+							notOpenIndex.Add(i);			// 処理対象に追加
+							break;
 						}
 					}
 				}
 			}
-		LOOP_END2: ;
-			return success;
+		}
+
+		private bool CalcVirtualBoard(int index, int y1, int x1, int y2, int x2, bool originOpened)
+		{
+			bool changed = true;
+			while (changed)
+			{
+				changed = false;
+				// 左上から考えまーす
+				for (int y = y1; y < y2; y++)
+				{
+					for (int x = x1; x < x2; x++)
+					{
+						int targetIdx = y * GameWidth + x;
+						if (!EnableIndex(targetIdx)) continue;
+						if (virtualBoard[targetIdx].Value <= 0) continue;
+
+						int notOpenCnt = 0;
+						int flagCnt = 0;
+						for (int i = 0; i < 8; i++)
+						{
+							int buf = targetIdx + kinbo[i];
+							if (!EnableIndex(buf)) continue;
+							if (virtualBoard[buf].Value == NotYetOpen) notOpenCnt++;
+							if (virtualBoard[buf].Value == BombFlag) flagCnt++;
+						}
+
+						// 自分の数とフラグの数が等しいなら、未開のマスを全部開ける
+						if (virtualBoard[targetIdx].Value == flagCnt)
+						{
+							for (int i = 0; i < 8; i++)
+							{
+								int buf = targetIdx + kinbo[i];
+								if (!EnableIndex(buf)) continue;
+								if (virtualBoard[buf].Value == NotYetOpen)
+								{
+									virtualBoard[buf].Value = VirtualOpened;
+									changed = true;
+								}
+							}
+						}
+
+						// 自分の数と「フラグの数＋未開マス」なら全部にフラグを立てる
+						else if (virtualBoard[targetIdx].Value == notOpenCnt + flagCnt)
+						{
+							for (int j = 0; j < 8; j++)
+							{
+								int buf = targetIdx + kinbo[j];
+								if (!EnableIndex(buf)) continue;
+								if (virtualBoard[buf].Value == NotYetOpen)
+								{
+									virtualBoard[buf].Value = BombFlag;
+									changed = true;
+								}
+							}
+						}
+						//else if (flagCnt > virtualBoard[targetIdx].Value ||
+						//         flagCnt + notOpenCnt < virtualBoard[targetIdx].Value)
+						// 旗の数が自分より多い場合、不正な状況である
+						else if (flagCnt >= virtualBoard[targetIdx].Value ||
+										(virtualBoard[targetIdx].Value != VirtualOpened &&  flagCnt + notOpenCnt < virtualBoard[targetIdx].Value))
+						{
+							// 始点を開けてた場合はフラグを立てる必要がある
+							if (originOpened)
+							{
+								Move_Click(index % GameWidth - 1, index / GameWidth - 1, MouseButtons.Right);
+								//Thread.Sleep(SleepCnt);
+
+								//Thread.Sleep(100);
+								Win32APIHelper.EnumWindows(EnumWindowsProc, 0);
+								if (isFind負けました)
+								{
+								}
+								
+								data[index].Val = BombFlag;
+							}
+							// 始点に旗を立てていた場合は開ける必要がある
+							else
+							{
+								Move_Click(index % GameWidth - 1, index / GameWidth - 1, MouseButtons.Left);
+								//Thread.Sleep(SleepCnt);
+
+								//Thread.Sleep(100);
+								Win32APIHelper.EnumWindows(EnumWindowsProc, 0);
+								if (isFind負けました)
+								{
+								 }
+				
+								data[index].Val = Opened;
+							}
+							//Thread.Sleep(SleepCnt);
+							return true;
+						}
+					}
+				}
+			}
+			return false;
+		}
+
+		private void CopyToVirtualBoard(int y1, int x1, int y2, int x2)
+		{
+			for (int y = y1 - 1; y <= y2; y++)
+			{
+				for (int x = x1 - 1; x <= x2; x++)
+				{
+					int buf = y * GameWidth + x;
+					if (EnableIndex(buf))
+					{
+						virtualBoard[buf].Index = buf;
+						virtualBoard[buf].IsChanged = true;
+
+						virtualBoard[buf].Value = data[buf].Val;
+					}
+				}
+			}
 		}
 
 		void 考える(Data d)
 		{
 			d.Update();
-			if (d.Val == 0 || d.Val == Max) return;
+			if (d.Val == 0 || d.Val == Opened) return;
 
 			// 周囲の開いていないマスを数える
-			int cntNotOpen = 0;
+			int cntNotYetOpen = 0;
 			int cntFlag = 0;
 
 			for (int i = 0; i < 8; i++)
 			{
 				int idx = d.Index + kinbo[i];
 				int val = data[idx].Val;
-				if (val == NotOpen) cntNotOpenBlockBuf[cntNotOpen++] = idx;
+				if (val == NotYetOpen) cntNotOpenBlockBuf[cntNotYetOpen++] = idx;
 				else if (val == BombFlag) cntFlagBlockBuf[cntFlag++] = idx;
 			}
 
@@ -624,19 +548,19 @@ namespace PlayMinesweeper
 				for (int i = 0; i < 8; i++)
 				{
 				  int idx = d.Index + kinbo[i];
-				  if (data[idx].Val == NotOpen)
+				  if (data[idx].Val == NotYetOpen)
 				  {
-				    data[idx].Val = Max;
+				    data[idx].Val = Opened;
 				    Move_Click(idx % GameWidth - 1, idx / GameWidth - 1, MouseButtons.Left);
 						Thread.Sleep(SleepCnt);
 						isUpdatedNowFrame = true;
 				  }
 				}
 			}
-			else if (d.Val == cntNotOpen + cntFlag)
+			else if (d.Val == cntNotYetOpen + cntFlag)
 			{
 				// 旗が確定するなら
-				for (int i = 0; i < cntNotOpen; i++)
+				for (int i = 0; i < cntNotYetOpen; i++)
 				{
 					int idx = cntNotOpenBlockBuf[i];
 					data[idx].Val = BombFlag;
@@ -691,7 +615,7 @@ namespace PlayMinesweeper
 			for (int i = 0; i < data.Length; i++)
 			{
 				Data tmp = data[i];
-				if ((tmp.Val == NotOpen || tmp.Val == None || tmp.Val == BombFlag || tmp.Val == Max) && !tmp.IsFix)
+				if ((tmp.Val == NotYetOpen || tmp.Val == Opened || tmp.Val == BombFlag || tmp.Val == Opened) && !tmp.IsFix)
 				{
 					int x = i % GameWidth - 1;
 					int y = i / GameWidth - 1;
@@ -701,7 +625,7 @@ namespace PlayMinesweeper
 
 					int tmpVal = tmp.Val;
 					if (CheckFlag(subColorImg)) tmp.Val = BombFlag;
-					else if (gray.Get2D(9, 8).Val0 >= 200) tmp.Val = NotOpen;
+					else if (gray.Get2D(9, 8).Val0 >= 200) tmp.Val = NotYetOpen;
 					else if (Check1(subColorImg)) tmp.Val = 1;
 					else if (Check2(subColorImg)) tmp.Val = 2;
 					else if (Check5(subColorImg)) tmp.Val = 5;
@@ -709,7 +633,7 @@ namespace PlayMinesweeper
 					else if (Check3(subColorImg)) tmp.Val = 3;
 					else if (Check4(subColorImg)) tmp.Val = 4;
 					else if (Check6(subColorImg)) tmp.Val = 6;
-					else tmp.Val = None;
+					else tmp.Val = Opened;
 
 					if (tmp.Val != tmpVal)
 					{
@@ -745,8 +669,8 @@ namespace PlayMinesweeper
 					switch (tmp)
 					{
 						case BombFlag: outputImg.Rectangle(rect, new CvScalar(0, 0, 0, 255), -1); break;
-						case NotOpen: outputImg.Rectangle(rect, new CvScalar(127, 127, 127, 255), -1); break;
-						case None: outputImg.Rectangle(rect, new CvScalar(200, 200, 200, 255), -1); break;
+						case NotYetOpen: outputImg.Rectangle(rect, new CvScalar(127, 127, 127, 255), -1); break;
+						case Opened: outputImg.Rectangle(rect, new CvScalar(200, 200, 200, 255), -1); break;
 						case 1: outputImg.Rectangle(rect, new CvScalar(190, 80, 64, 255), -1); break;
 						case 2: outputImg.Rectangle(rect, new CvScalar(0, 255, 0, 255), -1); break;
 						case 3: outputImg.Rectangle(rect, new CvScalar(0, 0, 255, 255), -1); break;
@@ -907,6 +831,7 @@ namespace PlayMinesweeper
 		}
 
 		#endregion
+
 	}
 
 
@@ -994,4 +919,44 @@ namespace PlayMinesweeper
 			return new Rectangle(rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top);
 		}
 	}
+
+
+	class VirtualDataViewer
+	{
+		public VirtualData[] Data;
+
+		public int Index;
+		public int Top;
+		public int Left;
+		public int Width;
+		public int Height;
+
+		public override string ToString()
+		{
+			StringBuilder sb = new StringBuilder();
+			for (int x = 0; x < Width; x++)
+			{
+				for (int y = 0; y < Height; y++)
+				{
+
+				}
+			}
+			return "";
+		}
+	}
+
+	struct VirtualData
+	{
+		public int Index;
+		public int Value;
+		public bool IsChanged;
+		public int X { get { return MainForm.GameWidth % Index - 1; } }
+		public int Y { get { return MainForm.GameWidth / Index - 1; ; } }
+
+		public override string ToString()
+		{
+			return string.Format("{0}, {1} val={2}", X, Y, Value);
+		}
+	}
+
 }

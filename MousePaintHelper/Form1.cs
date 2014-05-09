@@ -56,9 +56,6 @@ namespace MousePaintHelper
 		//       ドラッグ操作中の「マウスカーソルの移動」は、途中で割り込みが入らないよう
 		//       SendInput() で行う方が安全である。
 
-		// Note: MOUSEEVENTF_ABSOLUTE での座標指定は、特殊な座標単位系なので注意せよ。
-		//       画面左上のコーナーが (0, 0)、画面右下のコーナーが (65535, 65535)である。
-
 		// Note: No MOUSEEVENTF_ABSOLUTE での座標指定は、相対座標系になるが、単位が必ず
 		//       しも 1px ではないので注意せよ。
 		//       各 PC で設定された mouse speed と acceleration level に依存する。
@@ -152,15 +149,6 @@ namespace MousePaintHelper
 		public static void LeftButtonClick()
 		{
 			LeftButtonClick(1);
-			//// ドラッグ操作の準備 (struct 配列の宣言)
-			//INPUT[] input = new INPUT[2];
-
-			//// ドラッグ操作の準備 (第1イベントの定義 = 左ボタン Down)
-			//input[0].mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
-			//// ドラッグ操作の準備 (第2イベントの定義 = 左ボタン Up)
-			//input[1].mi.dwFlags = MOUSEEVENTF_LEFTUP;
-
-			//SendInput(2, input, Marshal.SizeOf(input[0]));
 		}
 
 		public static void LeftButtonClick(int count)

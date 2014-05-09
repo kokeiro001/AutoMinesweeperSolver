@@ -30,7 +30,6 @@
 		{
 			this.pbxMain = new OpenCvSharp.UserInterface.PictureBoxIpl();
 			this.btnReset = new System.Windows.Forms.Button();
-			this.btnTest = new System.Windows.Forms.Button();
 			this.btnRestart = new System.Windows.Forms.Button();
 			((System.ComponentModel.ISupportInitialize)(this.pbxMain)).BeginInit();
 			this.SuspendLayout();
@@ -56,16 +55,6 @@
 			this.btnReset.UseVisualStyleBackColor = true;
 			this.btnReset.Click += new System.EventHandler(this.btnReset_Click);
 			// 
-			// btnTest
-			// 
-			this.btnTest.Location = new System.Drawing.Point(93, 12);
-			this.btnTest.Name = "btnTest";
-			this.btnTest.Size = new System.Drawing.Size(75, 23);
-			this.btnTest.TabIndex = 2;
-			this.btnTest.Text = "button1";
-			this.btnTest.UseVisualStyleBackColor = true;
-			this.btnTest.Click += new System.EventHandler(this.btnTest_Click);
-			// 
 			// btnRestart
 			// 
 			this.btnRestart.Location = new System.Drawing.Point(174, 12);
@@ -74,6 +63,7 @@
 			this.btnRestart.TabIndex = 3;
 			this.btnRestart.Text = "restart";
 			this.btnRestart.UseVisualStyleBackColor = true;
+			this.btnRestart.Click += new System.EventHandler(this.btnRestart_Click);
 			// 
 			// MainForm
 			// 
@@ -81,7 +71,6 @@
 			this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
 			this.ClientSize = new System.Drawing.Size(573, 366);
 			this.Controls.Add(this.btnRestart);
-			this.Controls.Add(this.btnTest);
 			this.Controls.Add(this.btnReset);
 			this.Controls.Add(this.pbxMain);
 			this.Name = "MainForm";
@@ -96,7 +85,6 @@
 
 		private OpenCvSharp.UserInterface.PictureBoxIpl pbxMain;
 		private System.Windows.Forms.Button btnReset;
-		private System.Windows.Forms.Button btnTest;
 		private System.Windows.Forms.Button btnRestart;
 	}
 }
