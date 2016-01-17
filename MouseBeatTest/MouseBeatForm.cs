@@ -12,16 +12,23 @@ namespace MouseBeatTest
 {
 	public partial class MouseBeatForm : Form
 	{
-		const int Sec = 5;
+    const int PerClick = 10;
+    const int TimerNumbers = 10;
+    const int DurationSec = 3 * 60;
+    const int IntervalSec = 1;
 
 		List<Timer> timers = new List<Timer>();
 		public MouseBeatForm()
 		{
 			InitializeComponent();
 
-			for (int i = 0; i < 10; i++)
+      for (int i = 0; i < TimerNumbers; i++)
 			{
-				timers.Add(new Timer());
+        timers.Add(new Timer() 
+          { 
+            Interval = 1
+          }
+        );
 			}
 
 			StopAllTimer();
@@ -31,12 +38,17 @@ namespace MouseBeatTest
 		{
 			beginTimer.Tick += delegate
 			{
-				remainingTimer.Interval = Sec * 1000;
+        Invoke((MethodInvoker)delegate
+        {
+          Text = "running";
+        });
+        
+
+				remainingTimer.Interval = DurationSec * 1000;
 				remainingTimer.Start();
 
 				foreach (var item in timers)
 				{
-					item.Interval = 1;
 					item.Start();
 				}
 			};
@@ -45,21 +57,30 @@ namespace MouseBeatTest
 			{
 				item.Tick += delegate
 				{
-					MouseEventHelper.LeftButtonClick();
+          for (int i = 0; i < PerClick; i++)
+          {
+            MouseEventHelper.LeftButtonClick();
+
+          }
 				};
 			}
 
 			remainingTimer.Tick += delegate
 			{
 				StopAllTimer();
-			};
+        Invoke((MethodInvoker)delegate
+        {
+          Text = "stopped";
+        });
+      };
 
 			StopAllTimer();
 		}
 
 		private void btnBeginBeat_Click(object sender, EventArgs e)
 		{
-			beginTimer.Interval = 1000;
+      // 一定時間待ってから開始
+      beginTimer.Interval = IntervalSec * 1000;
 			beginTimer.Enabled = true;
 			beginTimer.Start();
 		}
