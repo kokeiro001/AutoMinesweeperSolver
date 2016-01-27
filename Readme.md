@@ -37,6 +37,11 @@ OpenCVのC#ラッパーライブラリ「OpenCVSharp」を用いてマインス�
 このソリューションにはいくつかのプロジェクトファイルが含まれていますが、
 PlayMinesweeperプロジェクトがメインのプロジェクトです。
 
+次のファイルにAIに関する記述がまとまっています。
+
+PlayGameAppli/MainForm.cs
+
+
 
 ## ライセンス
 
